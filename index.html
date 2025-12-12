@@ -86,6 +86,10 @@
   tr:nth-child(even) td{background:rgba(15,23,42,.85);}
   tr:nth-child(odd) td{background:rgba(15,23,42,.75);}
   .hint{font-size:.78rem;color:var(--muted);margin-top:4px;}
+  .input-error{
+  border-color:#f97373 !important;
+  box-shadow:0 0 0 1px rgba(248,113,113,.5) !important;
+}
 </style>
 
 <body>
@@ -135,59 +139,77 @@
     }[c]));
   }
   function setBusy(b){ btn.disabled = b; }
+async function lookup(){
+  const cccd = $('cccd').value.replace(/\D/g,'').trim();
+  const stk  = $('stk').value.replace(/\s/g,'').trim();
 
-  async function lookup(){
-    const cccd = $('cccd').value.replace(/\D/g,'').trim();
-    const stk  = $('stk').value.replace(/\s/g,'').trim();
+  msg.textContent = '';
+  out.innerHTML   = '';
+  setBusy(true);
 
-    msg.textContent = '';
-    out.innerHTML   = '';
-    setBusy(true);
+  // reset viền đỏ
+  ['cccd','stk'].forEach(id => $(id).classList.remove('input-error'));
 
-    if(!cccd || !stk){
-      msg.textContent = 'Vui lòng nhập đầy đủ CCCD và STK.';
-      setBusy(false);
+  // kiểm tra thiếu input ở phía client
+  if(!cccd || !stk){
+    msg.textContent = 'Vui lòng nhập đầy đủ CCCD và STK.';
+    if(!cccd) $('cccd').classList.add('input-error');
+    if(!stk)  $('stk').classList.add('input-error');
+    setBusy(false);
+    return;
+  }
+
+  try{
+    const url  = `${API_URL}?cccd=${encodeURIComponent(cccd)}&stk=${encodeURIComponent(stk)}`;
+    const res  = await fetch(url,{cache:'no-store'});
+    const data = await res.json();
+
+    if(!data.ok){
+      msg.textContent = data.error || 'Không tìm thấy dữ liệu. Vui lòng kiểm tra lại.';
+
+      const code = data.code || '';
+
+      if (code === 'NO_CCCD') {
+        $('cccd').classList.add('input-error');
+      } else if (code === 'STK_MISMATCH') {
+        $('stk').classList.add('input-error');
+      } else if (code === 'MISSING_INPUT') {
+        if(!cccd) $('cccd').classList.add('input-error');
+        if(!stk)  $('stk').classList.add('input-error');
+      } else {
+        // lỗi khác -> đánh dấu cả 2
+        $('cccd').classList.add('input-error');
+        $('stk').classList.add('input-error');
+      }
       return;
     }
 
-    try{
-      const url  = `${API_URL}?cccd=${encodeURIComponent(cccd)}&stk=${encodeURIComponent(stk)}`;
-      const res  = await fetch(url,{cache:'no-store'});
-      const data = await res.json();
+    // ok -> hiển thị dữ liệu
+    const rec = data.record || {};
+    const entries = Object.entries(rec);
 
-      if(!data.ok){
-        msg.textContent = data.error || 'Không tìm thấy dữ liệu. Vui lòng kiểm tra lại.';
-        return;
-      }
-
-      const rec = data.record || {};
-      const entries = Object.entries(rec);
-
-      if(!entries.length){
-        msg.textContent = 'Không có dữ liệu hiển thị.';
-        return;
-      }
-
-      let html = '<table><tbody>';
-      entries.forEach(([label,value])=>{
-        if(value === '' || value == null) return; // ẩn ô trống cho gọn
-        html += `<tr><th>${escapeHtml(label)}</th><td>${escapeHtml(value)}</td></tr>`;
-      });
-      html += '</tbody></table>';
-      out.innerHTML = html;
-    }catch(e){
-      console.error(e);
-      msg.textContent = 'Lỗi kết nối. Vui lòng thử lại sau.';
-    }finally{
-      setBusy(false);
+    if(!entries.length){
+      msg.textContent = 'Không có dữ liệu hiển thị.';
+      return;
     }
-  }
 
-  $('lookup-form').addEventListener('submit',e=>{
-    e.preventDefault();
-    lookup();
-  });
+    let html = '<table><tbody>';
+    entries.forEach(([label,value])=>{
+      if(value === '' || value == null) return;
+      html += `<tr><th>${escapeHtml(label)}</th><td>${escapeHtml(value)}</td></tr>`;
+    });
+    html += '</tbody></table>';
+    out.innerHTML = html;
+
+  }catch(e){
+    console.error(e);
+    msg.textContent = 'Lỗi kết nối. Vui lòng thử lại sau.';
+  }finally{
+    setBusy(false);
+  }
+}
 </script>
 </body>
 </html>
+
 
